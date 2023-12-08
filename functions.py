@@ -4,19 +4,21 @@ import re
 
 def remove_trailing_commas(file_path):
     try:
+        changes = False
         # Read the content of the text file
         with open(file_path, 'r') as file:
             content = file.read()
 
         # remove trailing comma and spaces
         while content.endswith(',') or content.endswith(' '):
+            changes = True
             content = content[:-1]
 
         # Write the modified content back to the file
         with open(file_path, 'w') as file:
             file.write(content)
-
-        print(f"Trailing commas or spaces removed from {file_path}")
+        if changes == True:
+            print(f"Trailing commas or spaces removed from {file_path}")
     except Exception as e:
         print(f"Error removing trailing commas or spaces: {e}")
 
@@ -72,13 +74,17 @@ def read_and_sort_text_files(input_folder, output_file):
 
         # Sort the text files using a natural sort order
         sorted_text_files = sorted(text_files, key=extract_numbers)
-
+        
         # Read the content of each text file and append it to a list
         content_list = []
         for file_name in sorted_text_files:
             file_path = os.path.join(input_folder, file_name)
             with open(file_path, 'r') as file:
-                content_list.append(file.read())
+                file_content = file.read()
+                # remove newlines from the end
+                while file_content.endswith("\n"):
+                    file_content = file_content[:-1]
+                content_list.append(file_content)
 
         # Write the content list to the output file
         with open(output_file, 'w') as output_file:
@@ -87,3 +93,27 @@ def read_and_sort_text_files(input_folder, output_file):
         print(f"Content of text files sorted and written to {output_file}")
     except Exception as e:
         print(f"Error reading and sorting text files: {e}")
+
+def list_files_with_keyword(folder_path, keyword):
+    # Ensure the folder path exists
+    if not os.path.exists(folder_path):
+        print(f"Folder '{folder_path}' does not exist.")
+        return []
+
+    matching_files = []
+
+    # Iterate through all files in the folder
+    for file_name in os.listdir(folder_path):
+        file_path = os.path.join(folder_path, file_name)
+
+        # Check if the file is a text file
+        if file_name.lower().endswith('.txt') and os.path.isfile(file_path):
+            # Read the content of the text file
+            with open(file_path, 'r', encoding='utf-8') as file:
+                file_content = file.read()
+
+            # Check if the keyword is present in the file content
+            if keyword.lower() in file_content.lower():
+                matching_files.append(file_name)
+
+    return matching_files
