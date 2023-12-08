@@ -178,13 +178,18 @@ def validate_path(path):
     return path
 
 def validate_image_folder(path):
-    while not os.path.isdir(path) or not any(file.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp')) for file in list_images_recursive(path)):
-        print("Invalid path or folder doesn't contain images. Please provide a valid image folder path.")
-        path = input("Enter a new path to an image folder: ")
-    return validate_path(path)
+    is_top_level_folder = (os.path.normpath(path) == os.path.normpath(os.getcwd()))
+
+    while is_top_level_folder == True or not os.path.isdir(path) or not any(file.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp')) for file in list_images_recursive(path)):
+        print("Invalid path {}\nor folder doesn't contain images. Please provide a valid image folder path.".format(path))
+        path = validate_path(input("Enter a new path to an image folder: "))
+        is_top_level_folder = (os.path.normpath(path) == os.path.normpath(os.getcwd()))
+
+    return path
 
 def main_interactive(initial_path, keywords_path):
     image_folder_path = validate_path(initial_path)
+    
     image_folder_path = validate_image_folder(image_folder_path)
 
     # if keywords path is empty or none create a subfolder in the images folder for the keywords
@@ -193,7 +198,6 @@ def main_interactive(initial_path, keywords_path):
         keywords_path = image_folder_path+"\keywords"
 
     keywords_path = validate_path(keywords_path)
-
 
     while True:
         print("\nAvailable Operations:")
