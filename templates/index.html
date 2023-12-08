@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Image Text Input</title>
+    <style>
+      body {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+        margin: 0;
+        font-family: "Verdana", sans-serif;
+      }
+
+      .container {
+        display: flex;
+        width: 100%;
+      }
+
+      .image-container {
+        flex: 1;
+      }
+
+      img {
+        max-width: 100%;
+        max-height: 80vh; /* Adjust the value as needed */
+        border-radius: 8px 0 0 8px;
+      }
+
+      .form-container {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 2px;
+        box-sizing: border-box;
+        height: 80vh; /* Set a fixed height for the form container */
+        overflow-y: auto; /* Add overflow-y for scrolling if needed */
+      }
+
+      h1 {
+        margin-bottom: 10px;
+        font-family: "Verdana", sans-serif;
+      }
+
+      h2 {
+        margin-bottom: 10px;
+        min-height: 29px;
+        font-family: "Verdana", sans-serif;
+      }
+
+      form {
+        width: 100%;
+      }
+
+      label {
+        margin-bottom: 5px;
+      }
+
+      input[type="text"] {
+        width: 98%; /* Adjust the value as needed */
+        padding: 10px;
+        border: 1px solid #ccc;
+        border-radius: 8px;
+        margin-bottom: 10px;
+        margin-left: 1%;
+        box-sizing: border-box;
+      }
+
+      .submit {
+        width: 98%;
+        padding: 10px;
+        background-color: #4caf50;
+        color: white;
+        border: none;
+        border-radius: 8px;
+        margin-left: 1%;
+        cursor: pointer;
+      }
+
+      .button {
+        width: 96%;
+        padding: 8px;
+        background-color: rgb(255, 166, 0);
+        color: white;
+        border: none;
+        border-radius: 8px;
+        margin-top: 4px;
+        margin-left: 2%;
+        margin-right: 2%;
+        cursor: pointer;
+      }
+
+      .button:hover {
+        background-color: rgb(223, 39, 39);
+      }
+
+      .submit:hover {
+        background-color: #45a049;
+      }
+
+      .abort-button {
+        position: absolute;
+        bottom: 10px;
+        right: 10px;
+        background-color: #ff0000;
+        color: white;
+        padding: 40px;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+      }
+
+      .abort-button:hover {
+        background-color: #cc0000;
+      }
+
+      #autocomplete-list {
+        border: 1px solid #ccc;
+        max-height: 600px;
+        overflow-y: auto;
+        position: absolute;
+      }
+
+      #autocomplete-list div {
+        padding: 10px;
+        cursor: pointer;
+        background-color: white; /* Set a background color */
+      }
+
+      #autocomplete-list div:hover {
+        background-color: #e0e0e0;
+      }
+    </style>
+  </head>
+  <body onload="keepFocus()">
+    <div class="container">
+      <div class="image-container">
+        <img src="{{ url_for('static', filename=image) }}" alt="Image" />
+      </div>
+      <div class="form-container">
+        <div id="filename">Current Filename: {{ image }}</div>
+        <!-- Display filename dynamically -->
+
+        <h2 id="textContent"></h2>
+        <form method="post" action="/">
+          <input type="text" name="user_input" id="userInput" autocomplete="off" oninput="auto_complete(event)" onkeydown="handleTabKey(event)" />
+          <div id="autocomplete-list"></div>
+          <input type="submit" class="submit" value="Submit" />
+        </form>
+        <!-- previos and next buttons -->
+        <div class="container">
+          <form method="get" action="/previous_image">
+            <input type="submit" class="button" value="Previous Image" />
+          </form>
+          <form method="get" action="/next_image">
+            <input type="submit" class="button" value="Next Image" />
+          </form>
+        </div>
+        <button class="abort-button" onclick="submitAbort()">Abort</button>
+      </div>
+    </div>
+
+    <script>
+      var current_label = "";
+      var keywordList = null;
+
+      function onTextInput() {
+        var userInput = document.getElementById("userInput").value;
+        document.getElementById("textContent").innerText = (current_label != "" ? current_label + "," : current_label) + userInput;
+      }
+
+      async function keepFocus() {
+        // Maintain focus on the input textbox after the page updates
+        document.getElementById("userInput").focus();
+
+        // Fetch the text content for the current image
+        fetch("/get_text_content/{{ image }}")
+          .then((response) => response.text())
+          .then((textContent) => {
+            document.getElementById("textContent").innerText = textContent;
+            current_label = document.getElementById("textContent").innerText;
+          });
+
+        // Fetch keywords from the JSON file
+        keywordList = await fetchKeywords();
+      }
+
+      // Autocomplete logic
+      async function auto_complete(event) {
+        onTextInput();
+
+        const inputText = event.target.value.toLowerCase();
+        const autocompleteList = document.getElementById("autocomplete-list");
+        autocompleteList.innerHTML = ""; // Clear previous suggestions
+
+        // Split the input text into keywords
+        const keywords = inputText.split(",").map((keyword) => keyword.trim());
+        const lastKeyword = keywords[keywords.length - 1];
+
+        // Filter words from the fetched keywords that match the last keyword
+        const filteredWords = keywordList.filter((word) => word.toLowerCase().startsWith(lastKeyword));
+
+        // Display the matched words in the autocomplete dropdown
+        filteredWords.forEach((word) => {
+          const suggestion = document.createElement("div");
+          suggestion.textContent = word;
+          suggestion.onclick = () => {
+            // Replace the last keyword with the selected word
+            keywords[keywords.length - 1] = word;
+            document.getElementById("userInput").value = keywords.join(", ") + ",";
+            autocompleteList.innerHTML = ""; // Clear the dropdown after selecting a suggestion
+            onTextInput();
+            document.getElementById("userInput").focus();
+            auto_complete(event);
+          };
+          autocompleteList.appendChild(suggestion);
+        });
+      }
+
+      function handleTabKey(event) {
+        if (event.key === "Tab") {
+          const autocompleteList = document.getElementById("autocomplete-list");
+          const firstSuggestion = autocompleteList.querySelector("div");
+
+          if (firstSuggestion) {
+            const suggestedWord = firstSuggestion.textContent;
+            const userInput = document.getElementById("userInput");
+            const currentKeywords = userInput.value.split(",").map((keyword) => keyword.trim());
+            currentKeywords[currentKeywords.length - 1] = suggestedWord;
+            userInput.value = currentKeywords.join(", ") + ",";
+            autocompleteList.innerHTML = ""; // Clear the dropdown after selecting a suggestion
+            onTextInput();
+          }
+
+          event.preventDefault(); // Prevent the default behavior of the Tab key
+        }
+      }
+
+      function navButton(direction) {
+        fetch(`/${direction}`, {
+          method: "GET",
+        })
+          .then((response) => response.json())
+          .then((data) => {
+            // Handle the response data as needed
+            console.log(data);
+          })
+          .catch((error) => {
+            console.error("Error:", error);
+          });
+      }
+
+      function submitAbort() {
+        // Submit abort message to a new route
+        fetch("/abort_submission", { method: "POST" })
+          .then((response) => response.text())
+          .then((message) => console.log(message)); // You can handle the response as needed
+      }
+
+      // Function to fetch keywords from a JSON file
+      async function fetchKeywords() {
+        try {
+          const response = await fetch("/get_keywords"); // Fetch from the new route
+          const data = await response.json();
+          return data.keywords;
+        } catch (error) {
+          console.error("Error fetching keywords:", error);
+          return [];
+        }
+      }
+    </script>
+  </body>
+</html>
