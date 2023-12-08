@@ -8,13 +8,20 @@ from flask import Flask, render_template, request, send_from_directory
 from threading import Thread
 from werkzeug.serving import make_server
 
-def start_image_input_server(image_folder):
-    template_folder = os.path.join(os.path.dirname(__file__), 'templates')
+def start_image_input_server(image_folder, keywords_path):
+    template_folder = os.path.join(os.getcwd(), 'templates')
     app = Flask(__name__, template_folder=template_folder, static_folder=image_folder)
-
-    # Get a list of all image files in the folder
-    image_files = sorted([f for f in os.listdir(image_folder) if f.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp'))], key=extract_numbers)
     
+    # Get a list of all image files in the folder
+    #image_files = sorted([f for f in os.listdir(image_folder) if f.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp'))], key=extract_numbers)
+    
+    image_files = list_images_recursive(image_folder)
+    print(*image_files, sep="\n")
+
+    if len(image_files) <= 0:
+        print("Folder contains no images.")
+        return
+
     current_image_index = -1
 
     # Counter to keep track of the current image index
@@ -60,7 +67,7 @@ def start_image_input_server(image_folder):
         nonlocal current_image_index
 
         # update the keywords.json before sending it 
-        update_keywords_json(image_folder, os.path.dirname(__file__)+"/keywords.json")
+        update_keywords_json(image_folder, keywords_path+"/keywords.json")
 
         # If all images have been processed, set the shutdown signal
         if current_image_index >= len(image_files):
@@ -69,6 +76,8 @@ def start_image_input_server(image_folder):
         # Get the current image file name
         current_image = image_files[current_image_index]
 
+        print("current image: ", current_image)
+
         # Render the template with the current image
         return render_template('index.html', image=current_image)
 
@@ -76,18 +85,18 @@ def start_image_input_server(image_folder):
     @app.route('/get_keywords', methods=['GET'])
     def get_keywords():
         # update the keywords.json before sending it 
-        update_keywords_json(image_folder, os.path.dirname(__file__)+"/keywords.json")
+        update_keywords_json(image_folder, keywords_path+"/keywords.json")
 
-        return send_from_directory(os.path.dirname(__file__), 'keywords.json')
+        return send_from_directory(keywords_path, 'keywords.json')
 
-    @app.route('/get_text_content/<image_name>')
+    @app.route('/get_text_content/<path:image_name>')
     def get_text_content(image_name):
         # Create the full path for the corresponding text file
         txt_file_path = os.path.splitext(os.path.join(image_folder, image_name))[0] + '.txt'
 
         # Return nothing if the txt file doesn't exist yet
         if not os.path.exists(txt_file_path):
-            print("Image '{}' does not exist".format(txt_file_path))
+            #print("Image '{}' does not exist".format(txt_file_path))
             return ""
         
         # remove trailing commas from file
@@ -163,15 +172,30 @@ def start_image_input_server(image_folder):
 
     return server_thread
 
-def main_interactive(initial_path):
-    folder_path = initial_path
+def validate_path(path):
+    if not os.path.isabs(path):
+        path = os.path.join(os.getcwd(), path)
+    return path
+
+def validate_image_folder(path):
+    while not os.path.isdir(path) or not any(file.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp')) for file in list_images_recursive(path)):
+        print("Invalid path or folder doesn't contain images. Please provide a valid image folder path.")
+        path = input("Enter a new path to an image folder: ")
+    return validate_path(path)
+
+def main_interactive(initial_path, keywords_path):
+    image_folder_path = validate_path(initial_path)
+    image_folder_path = validate_image_folder(image_folder_path)
+
+    # if keywords path is empty or none create a subfolder in the images folder for the keywords
+    if keywords_path == None or keywords_path == "":
+        os.makedirs(image_folder_path+"\keywords", exist_ok=True)
+        keywords_path = image_folder_path+"\keywords"
+
+    keywords_path = validate_path(keywords_path)
+
 
     while True:
-        if not os.path.isdir(folder_path):
-            print("Invalid path. Please provide a valid folder path.")
-            folder_path = input("Enter the path to the folder: ")
-            continue
-
         print("\nAvailable Operations:")
         print("1. Append a word to each file")
         print("2. Replace a word in each file")
@@ -186,27 +210,27 @@ def main_interactive(initial_path):
 
         if choice == '1':
             append_word = input("Enter the word to append: ")
-            process_files(folder_path, 'append', append_word, None)
+            process_files(image_folder_path, 'append', append_word, None)
         elif choice == '2':
             replace_word = input("Enter the word to replace: ")
             new_word = input("Enter the new word: ")
-            process_files(folder_path, 'replace', replace_word, new_word)
+            process_files(image_folder_path, 'replace', replace_word, new_word)
         elif choice == '3':
             prepend_word = input("Enter the word to prepend: ")
-            process_files(folder_path, 'prepend', prepend_word, None)
+            process_files(image_folder_path, 'prepend', prepend_word, None)
         elif choice == '4':
             initial_text = input("Enter the initial text: ")
-            create_text_files(folder_path, initial_text)
+            create_text_files(image_folder_path, initial_text)
         elif choice == '5':
-            server_thread = start_image_input_server(folder_path)
-            server_thread.join()
+            thread = start_image_input_server(image_folder_path, keywords_path)
+            thread.join()
             #start_image_input_server(folder_path)
         elif choice == '6':
             file_name = input("Please input the name for the output file: ")
-            read_and_sort_text_files(folder_path, os.path.dirname(__file__) + "/" + file_name)
+            read_and_sort_text_files(image_folder_path, os.path.dirname(__file__) + "/" + file_name)
         elif choice == '7':
             keyword = input("Input the keyword you are searching for: ")
-            print(list_files_with_keyword(folder_path, keyword))
+            print(list_files_with_keyword(image_folder_path, keyword))
         elif choice == '8':
             print("Exiting the interactive terminal.")
             break
@@ -216,6 +240,7 @@ def main_interactive(initial_path):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Interactive script to process text files and images.")
     parser.add_argument("--path", required=True, help="Initial path to the folder.")
+    parser.add_argument("--keywords", default=None, required=False, help="Path to keywords file folder")
     args = parser.parse_args()
 
-    main_interactive(args.path)
+    main_interactive(args.path, args.keywords)

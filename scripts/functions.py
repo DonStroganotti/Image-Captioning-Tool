@@ -31,14 +31,17 @@ def extract_numbers(s):
     return [int(text) if text.isdigit() else text.lower() for text in re.split('([0-9]+)', s)]
 
 def extract_keywords_from_files(folder_path):
-    # Collect all keywords from txt files in the specified folder
+    # Collect all keywords from txt files in the specified folder and its subfolders
     keywords_set = set()
 
-    for filename in os.listdir(folder_path):
-        if filename.endswith(".txt"):
-            file_path = os.path.join(folder_path, filename)
-            
-            with open(file_path, "r", encoding="utf-8") as file:
+    image_files = list_images_recursive(folder_path)
+
+    for image_file in image_files:
+        txt_file_path = os.path.splitext(image_file)[0] + '.txt'
+        txt_file_path = os.path.join(folder_path, txt_file_path)
+
+        if os.path.exists(txt_file_path):
+            with open(txt_file_path, "r", encoding="utf-8") as file:
                 content = file.read()
                 # Assuming keywords are separated by commas
                 keywords = [keyword.strip() for keyword in content.split(",")]
@@ -117,3 +120,12 @@ def list_files_with_keyword(folder_path, keyword):
                 matching_files.append(file_name)
 
     return matching_files
+
+def list_images_recursive(base_folder):
+    image_files = []
+    for root, dirs, files in os.walk(base_folder):
+        for file in files:
+            if file.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp')):
+                relative_path = os.path.relpath(os.path.join(root, file), base_folder).replace(os.path.sep, '/')
+                image_files.append(relative_path)
+    return sorted(image_files, key=extract_numbers)

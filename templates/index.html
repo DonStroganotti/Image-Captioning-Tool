@@ -143,7 +143,7 @@
         <!-- Display filename dynamically -->
 
         <h2 id="textContent"></h2>
-        <form method="post" action="/">
+        <form method="post" action="/" onsubmit="return validateForm()">
           <input type="text" name="user_input" id="userInput" autocomplete="off" oninput="auto_complete(event)" onkeydown="handleTabKey(event)" />
           <div id="autocomplete-list"></div>
           <input type="submit" class="submit" value="Submit" />
@@ -184,6 +184,18 @@
 
         // Fetch keywords from the JSON file
         keywordList = await fetchKeywords();
+      }
+
+      function validateForm() {
+        var userInput = document.getElementById("userInput").value;
+
+        // Check if the input contains only UTF-8 characters
+        if (/^[\x00-\x7F]*$/.test(userInput)) {
+          return true; // Allow submission
+        } else {
+          alert("Please enter only UTF-8 characters.");
+          return false; // Prevent form submission
+        }
       }
 
       // Autocomplete logic
