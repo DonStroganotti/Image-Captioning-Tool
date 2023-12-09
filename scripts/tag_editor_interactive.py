@@ -35,6 +35,7 @@ def start_image_input_server(image_folder, keywords_path):
         if(_index < 0 or _index >= len(image_files)): 
             print("Index {} is not valid, use values between 0 and {}".format(_index, len(image_files)-1))
             continue
+
         current_image_index = _index
 
     # Print the selected image index and name
@@ -76,8 +77,6 @@ def start_image_input_server(image_folder, keywords_path):
         # Get the current image file name
         current_image = image_files[current_image_index]
 
-        print("current image: ", current_image)
-
         # Render the template with the current image
         return render_template('index.html', image=current_image)
 
@@ -107,6 +106,7 @@ def start_image_input_server(image_folder, keywords_path):
             text_content = txt_file.read()
 
         return text_content
+    
     # Route for going to the previous image
     @app.route('/previous_image', methods=['GET'])
     def backward():
@@ -128,44 +128,38 @@ def start_image_input_server(image_folder, keywords_path):
 
         # Redirect to the next image
         return index()
-
+    
     @app.route('/', methods=['POST'])
     def process_text():
         nonlocal current_image_index
+        # remove , and " " at the end of the input
+        user_input = request.form['user_input'].rstrip(', ')
 
-        # Get the user input from the form, and remove trailing commas
-        user_input = request.form['user_input']
-
-        # remove trailing comma and spaces
-        while user_input.endswith(',') or user_input.endswith(' '):
-            user_input = user_input[:-1]
-
-        if len(user_input) <= 0:
-            # Move on to the next image
+        if not user_input:
             current_image_index += 1
             return index()
 
-        # Get the current image file name
         current_image = image_files[current_image_index]
-
-        # Create the full path for the corresponding text file
         txt_file_path = os.path.splitext(os.path.join(image_folder, current_image))[0] + '.txt'
 
-        # Create the text file if it doesn't exist
-        if not os.path.exists(txt_file_path):
-            open(txt_file_path, 'w').close()
+        with open(txt_file_path, 'a' if os.path.exists(txt_file_path) else 'w') as txt_file:
+            txt_file.write(("," if not is_text_file_empty(txt_file_path) else "") + user_input)
 
-        is_empty = is_text_file_empty(txt_file_path)
-
-        # Append the user input to the text file
-        with open(txt_file_path, 'a') as txt_file:
-            txt_file.write(("," if not is_empty else "") + user_input)
-
-        # Move on to the next image
         current_image_index += 1
-
-        # Redirect to the next image or completion message
         return index()
+        
+    # clear tags of the current selected image
+    @app.route('/clear_tags', methods=['GET'])
+    def clear_tags():
+        nonlocal current_image_index
+
+        current_image = image_files[current_image_index]
+        txt_file_path = os.path.splitext(os.path.join(image_folder, current_image))[0] + '.txt'
+
+        with open(txt_file_path, 'w'):
+            print("Clearing tags for image:", current_image)
+
+        return ""
 
     # Open the default web browser
     webbrowser.open('http://127.0.0.1:5000')
