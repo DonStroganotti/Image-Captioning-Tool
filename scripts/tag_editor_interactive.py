@@ -1,22 +1,23 @@
+import base64
+import io
 import os
 import argparse
+import shutil
 import sys
+import uuid
 import webbrowser
 from functions import *
 from tag_editor import create_text_files, process_files
-from flask import Flask, render_template, request, send_from_directory
+from flask import Flask, jsonify, render_template, request, send_from_directory
 from threading import Thread
 from werkzeug.serving import make_server
+from PIL import Image
 
-def start_image_input_server(image_folder, keywords_path):
+def start_image_input_server(image_folder, keywords_path, backup_path):
     template_folder = os.path.join(os.getcwd(), 'templates')
     app = Flask(__name__, template_folder=template_folder, static_folder=image_folder)
     
-    # Get a list of all image files in the folder
-    #image_files = sorted([f for f in os.listdir(image_folder) if f.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp'))], key=extract_numbers)
-    
     image_files = list_images_recursive(image_folder)
-    print(*image_files, sep="\n")
 
     if len(image_files) <= 0:
         print("Folder contains no images.")
@@ -129,8 +130,8 @@ def start_image_input_server(image_folder, keywords_path):
         # Redirect to the next image
         return index()
     
-    @app.route('/', methods=['POST'])
-    def process_text():
+    @app.route('/submit', methods=['POST'])
+    def submit():
         nonlocal current_image_index
         # remove , and " " at the end of the input
         user_input = request.form['user_input'].rstrip(', ')
@@ -147,7 +148,7 @@ def start_image_input_server(image_folder, keywords_path):
 
         current_image_index += 1
         return index()
-        
+            
     # clear tags of the current selected image
     @app.route('/clear_tags', methods=['GET'])
     def clear_tags():
@@ -160,6 +161,47 @@ def start_image_input_server(image_folder, keywords_path):
             print("Clearing tags for image:", current_image)
 
         return ""
+    
+    @app.route('/upload_cropped_image', methods=['POST'])
+    def upload_cropped_image():
+        data = request.get_json()
+        cropped_data_url = data.get('croppedImage')
+
+        nonlocal current_image_index
+        nonlocal image_files
+
+        current_image = image_files[current_image_index]
+        current_image_path = os.path.join(image_folder, current_image)
+
+        # Generate a unique identifier
+        unique_id = str(uuid.uuid4())[:8]  # Use the first 8 characters of the UUID
+
+        # Create a backup filename with the unique identifier
+        backup_filename = f"{os.path.splitext(current_image)[0]}_{unique_id}{os.path.splitext(current_image)[1]}"
+
+        # Create the full path for the backup file
+        backup_filepath = os.path.join(backup_path, backup_filename)
+
+        # Copy the current image to the backup file
+        shutil.copy2(current_image_path, backup_filepath)
+
+        # remove the current file before the cropped one is saved
+        os.remove(current_image_path)
+
+        # Handle the cropped data URL
+        _, encoded_data = cropped_data_url.split(',', 1)
+        image_data = base64.b64decode(encoded_data)
+
+        # Save the cropped image as JPG with 95% quality
+        cropped_image = Image.open(io.BytesIO(image_data)).convert("RGB")
+        jpg_path = os.path.join(image_folder, current_image.replace(os.path.splitext(current_image)[1], '.jpg'))
+        cropped_image.save(jpg_path, 'JPEG', quality=95)
+
+        # update image list to make sure all current images are found in case file ending changed
+        image_files = list_images_recursive(image_folder)
+
+        return jsonify({'message': 'Cropped image received and saved successfully'})
+
 
     # Open the default web browser
     webbrowser.open('http://127.0.0.1:5000')
@@ -174,17 +216,28 @@ def validate_path(path):
 def validate_image_folder(path):
     is_top_level_folder = (os.path.normpath(path) == os.path.normpath(os.getcwd()))
 
-    while is_top_level_folder == True or not os.path.isdir(path) or not any(file.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp')) for file in list_images_recursive(path)):
+    while is_top_level_folder == True or not os.path.isdir(path) or not any(file.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp')) for file in list_images_recursive(path)):
         print("Invalid path {}\nor folder doesn't contain images. Please provide a valid image folder path.".format(path))
         path = validate_path(input("Enter a new path to an image folder: "))
         is_top_level_folder = (os.path.normpath(path) == os.path.normpath(os.getcwd()))
 
     return path
 
-def main_interactive(initial_path, keywords_path):
+def main_interactive(initial_path, keywords_path, backup_path):
     image_folder_path = validate_path(initial_path)
-    
     image_folder_path = validate_image_folder(image_folder_path)
+    backup_folder_path = validate_path(backup_path)
+
+    # Check if the folder exists
+    if not os.path.exists(backup_folder_path):
+        # If it doesn't exist, create the folder
+        os.makedirs(backup_folder_path)
+
+    if not os.path.isdir(backup_folder_path):
+        print("backup folder '{}' is invalid!".format(backup_folder_path))
+        return
+
+    print("Backup folder path: ",backup_folder_path)
 
     # if keywords path is empty or none create a subfolder in the images folder for the keywords
     if keywords_path == None or keywords_path == "":
@@ -220,7 +273,7 @@ def main_interactive(initial_path, keywords_path):
             initial_text = input("Enter the initial text: ")
             create_text_files(image_folder_path, initial_text)
         elif choice == '5':
-            thread = start_image_input_server(image_folder_path, keywords_path)
+            thread = start_image_input_server(image_folder_path, keywords_path, backup_folder_path)
             thread.join()
             #start_image_input_server(folder_path)
         elif choice == '6':
@@ -239,6 +292,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Interactive script to process text files and images.")
     parser.add_argument("--path", required=True, help="Initial path to the folder.")
     parser.add_argument("--keywords", default=None, required=False, help="Path to keywords file folder")
+    parser.add_argument("--backup", default="backup", required=False, help="Path to backup folder")
     args = parser.parse_args()
 
-    main_interactive(args.path, args.keywords)
+    main_interactive(args.path, args.keywords, args.backup)

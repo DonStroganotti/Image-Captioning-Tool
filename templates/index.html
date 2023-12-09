@@ -15,27 +15,41 @@
       .container {
         display: flex;
         width: 100%;
+        height: 95vh;
+        overflow: hidden;
+        flex-wrap: wrap;
+      }
+
+      .btn_container {
+        width: 98%;
+        display: flex;
+        flex-wrap: wrap;
       }
 
       .image-container {
         flex: 1;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        max-height: 95vh; /* Limit to 95% of the window height */
+        overflow: hidden; /* Hide overflow if the image is larger */
       }
 
       img {
         max-width: 100%;
-        max-height: 80vh; /* Adjust the value as needed */
+        max-height: 100%;
         border-radius: 8px 0 0 8px;
       }
 
       .form-container {
-        flex: 1;
+        flex: 0 0 50%;
         display: flex;
         flex-direction: column;
         align-items: center;
         padding: 2px;
         box-sizing: border-box;
-        height: 80vh; /* Set a fixed height for the form container */
-        overflow-y: auto; /* Add overflow-y for scrolling if needed */
+        margin-top: 15vh;
+        height: 100%;
       }
 
       h1 {
@@ -49,10 +63,6 @@
         font-family: "Verdana", sans-serif;
       }
 
-      form {
-        width: 100%;
-      }
-
       label {
         margin-bottom: 5px;
       }
@@ -62,9 +72,9 @@
         padding: 10px;
         border: 1px solid #ccc;
         border-radius: 8px;
-        margin-bottom: 10px;
         margin-left: 1%;
         box-sizing: border-box;
+        margin-bottom: 2px;
       }
 
       .submit {
@@ -75,24 +85,31 @@
         border: none;
         border-radius: 8px;
         margin-left: 1%;
+        margin-top: 4px;
         cursor: pointer;
       }
 
+      .submit_form {
+        width: 100%;
+      }
+
+      .half_button {
+        width: 50%;
+      }
+
       .button {
-        width: 96%;
+        width: 100%;
         padding: 8px;
         background-color: rgb(255, 166, 0);
         color: white;
         border: none;
         border-radius: 8px;
         margin-top: 4px;
-        margin-left: 2%;
-        margin-right: 2%;
         cursor: pointer;
       }
 
       .clear_tags {
-        width: 98%;
+        width: 100%;
         padding: 8px;
         background-color: rgb(76, 122, 221);
         color: white;
@@ -151,33 +168,38 @@
   <body onload="keepFocus()">
     <div class="container">
       <div class="image-container">
-        <img src="{{ url_for('static', filename=image) }}" alt="Image" />
+        <img id="image" src="{{ url_for('static', filename=image) }}" alt="Image" />
       </div>
       <div class="form-container">
         <div id="filename">Current Filename: {{ image }}</div>
         <!-- Display filename dynamically -->
 
         <h2 id="textContent"></h2>
-        <form method="post" action="/" onsubmit="return validateForm()">
+        <form class="submit_form" method="post" onsubmit="return validateForm()">
           <input type="text" name="user_input" id="userInput" autocomplete="off" oninput="auto_complete(event)" onkeydown="handleTabKey(event)" />
           <div id="autocomplete-list"></div>
-          <input type="submit" class="submit" value="Submit" />
+          <input id="submit_button" type="submit" class="submit" value="Submit" formaction="/submit" />
+          <input id="submitAndCrop" type="button" class="submit" value="Submit & Crop" onclick="submitAndUploadCroppedImage()" />
         </form>
         <!-- previos and next buttons -->
-        <div class="container">
-          <form method="get" action="/previous_image">
-            <input type="submit" class="button" value="Previous Image" />
+        <div class="btn_container">
+          <form class="half_button" method="get" action="/previous_image">
+            <input type="submit" class="button" value="Previous Image" onclick="navButton('previous_image')" />
           </form>
-          <form method="get" action="/next_image">
-            <input type="submit" class="button" value="Next Image" />
+          <form class="half_button" method="get" action="/next_image">
+            <input type="submit" class="button" value="Next Image" onclick="navButton('next_image')" />
           </form>
+          <!-- clear tags and copy to input -->
+          <button class="clear_tags" onclick="buttonClearAndCopyTags()">Clear Tags & Copy to Textbox</button>
+          <button class="clear_tags" onclick="buttonClearTags()">Clear Tags</button>
         </div>
-        <!-- clear tags and copy to input -->
-        <button class="clear_tags" onclick="buttonClearAndCopyTags()">Clear Tags & Copy to Textbox</button>
-        <button class="clear_tags" onclick="buttonClearTags()">Clear Tags</button>
         <button class="abort-button" onclick="submitAbort()">Abort</button>
       </div>
     </div>
+
+    <!-- load cropper -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.12/cropper.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.12/cropper.min.css" />
 
     <script>
       var current_label = "";
@@ -308,20 +330,6 @@
         }
       }
 
-      function navButton(direction) {
-        fetch(`/${direction}`, {
-          method: "GET",
-        })
-          .then((response) => response.json())
-          .then((data) => {
-            // Handle the response data as needed
-            console.log(data);
-          })
-          .catch((error) => {
-            console.error("Error:", error);
-          });
-      }
-
       function submitAbort() {
         // Submit abort message to a new route
         fetch("/abort_submission", { method: "POST" })
@@ -340,6 +348,45 @@
           return [];
         }
       }
+
+      function submitAndUploadCroppedImage() {
+        var canvas = cropper.getCroppedCanvas();
+        var croppedDataUrl = canvas.toDataURL();
+
+        console.log("DOES THIS RUN");
+        fetch("/upload_cropped_image", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ croppedImage: croppedDataUrl }),
+        })
+          .then(() => {
+            // Click the submit button
+            document.getElementById("submit_button").click();
+          })
+          .catch((error) => {
+            console.error("Error uploading cropped image:", error);
+          });
+      }
+
+      var cropper;
+
+      document.addEventListener("DOMContentLoaded", function () {
+        var image = document.getElementById("image");
+
+        cropper = new Cropper(image, {
+          movable: false,
+          zoomable: false,
+          rotatable: false,
+          scalable: false,
+          minCropBoxWidth: 16,
+          minCropBoxHeight: 16,
+          autoCrop: true,
+          autoCropArea: 0.9,
+          viewMode: 1,
+        });
+      });
     </script>
   </body>
 </html>

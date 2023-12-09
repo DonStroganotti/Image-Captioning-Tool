@@ -125,7 +125,7 @@ def list_images_recursive(base_folder):
     image_files = []
     for root, dirs, files in os.walk(base_folder):
         for file in files:
-            if file.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp')):
+            if file.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp')):
                 relative_path = os.path.relpath(os.path.join(root, file), base_folder).replace(os.path.sep, '/')
                 image_files.append(relative_path)
     return sorted(image_files, key=extract_numbers)
