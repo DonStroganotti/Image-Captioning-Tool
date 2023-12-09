@@ -6,6 +6,8 @@ import shutil
 import sys
 import uuid
 import webbrowser
+
+from tqdm import tqdm
 from functions import *
 from tag_editor import create_text_files, process_files
 from flask import Flask, jsonify, render_template, request, send_from_directory
@@ -208,6 +210,43 @@ def start_image_input_server(image_folder, keywords_path, backup_path):
 
     return server_thread
 
+def backup_images(source_folder, backup_folder):
+    print(f"Backing up images to {backup_folder}...")
+    for filename in os.listdir(source_folder):
+        if filename.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp', ".webp")):
+            source_path = os.path.join(source_folder, filename)
+            backup_path = os.path.join(backup_folder, filename)
+            shutil.copy2(source_path, backup_path)
+
+def resize_images(input_folder, output_folder, target_pixel_count=(1024, 1024), quality=95):
+   # Get the list of image filenames
+    image_filenames = [filename for filename in os.listdir(input_folder) if filename.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp', ".webp"))]
+
+    # Use tqdm to create a progress bar
+    for filename in tqdm(image_filenames, desc="Resizing Images", unit="image"):
+        input_path = os.path.join(input_folder, filename)
+        output_path = os.path.join(output_folder, filename)
+
+        _target_px_count = target_pixel_count[0] * target_pixel_count[1]
+        # Open the image
+        with Image.open(input_path) as img:
+            _width, _height = img.size
+            _pxCount = _width*_height
+
+            # Resize while maintaining aspect ratio
+            while _pxCount > _target_px_count:
+                _width *= 0.99
+                _height *= 0.99
+                _pxCount = _width*_height
+
+            _width = int(_width)
+            _height = int(_height)
+
+            # Save the resized image as JPEG with the specified quality
+            img = img.resize(size=(_width, _height))
+            img.convert("RGB").save(output_path, "JPEG", quality=quality)
+
+
 def validate_path(path):
     if not os.path.isabs(path):
         path = os.path.join(os.getcwd(), path)
@@ -255,9 +294,10 @@ def main_interactive(initial_path, keywords_path, backup_path):
         print("5. Process images and append text to corresponding files")
         print("6. Outputs the content of all txt files into a new file as a list")
         print("7. Lists all files that contain a specific keyword")
-        print("8. Exit")
+        print("8. Backup and Resize Images")
+        print("9. Exit")
 
-        choice = input("Enter the operation number (1-8): ")
+        choice = input("Enter the operation number (1-9): ")
 
         if choice == '1':
             append_word = input("Enter the word to append: ")
@@ -283,6 +323,18 @@ def main_interactive(initial_path, keywords_path, backup_path):
             keyword = input("Input the keyword you are searching for: ")
             print(list_files_with_keyword(image_folder_path, keyword))
         elif choice == '8':
+            # Option to backup and resize images
+            resize_target = input("Enter the target pixel count (width height), e.g., 1024 1024: ")
+            try:
+                target_width, target_height = map(int, resize_target.split())
+            except ValueError:
+                print("Invalid input for target pixel count. Please enter two integers separated by a space.")
+                continue
+            # Backup images
+            backup_images(image_folder_path, backup_folder_path)
+            # Resize images
+            resize_images(image_folder_path, image_folder_path, target_pixel_count=(target_width, target_height))
+        elif choice == '9':
             print("Exiting the interactive terminal.")
             break
         else:
