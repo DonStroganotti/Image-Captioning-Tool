@@ -179,7 +179,13 @@ def start_image_input_server(image_folder, keywords_path, backup_path):
         unique_id = str(uuid.uuid4())[:8]  # Use the first 8 characters of the UUID
 
         # Create a backup filename with the unique identifier
-        backup_filename = f"{os.path.splitext(current_image)[0]}_{unique_id}{os.path.splitext(current_image)[1]}"
+        backup_filename = os.path.splitext(current_image)[0] + os.path.splitext(current_image)[1]
+        backup_filepath = os.path.join(backup_path, backup_filename)
+
+        # Check if a file with the same name already exists
+        while os.path.exists(backup_filepath):
+            backup_filename = f"{os.path.splitext(current_image)[0]}_{unique_id}{os.path.splitext(current_image)[1]}"
+            backup_filepath = os.path.join(backup_path, backup_filename)
 
         # Create the full path for the backup file
         backup_filepath = os.path.join(backup_path, backup_filename)
@@ -194,10 +200,10 @@ def start_image_input_server(image_folder, keywords_path, backup_path):
         _, encoded_data = cropped_data_url.split(',', 1)
         image_data = base64.b64decode(encoded_data)
 
-        # Save the cropped image as JPG with 95% quality
+        # Save the cropped image
         cropped_image = Image.open(io.BytesIO(image_data)).convert("RGB")
         jpg_path = os.path.join(image_folder, current_image.replace(os.path.splitext(current_image)[1], '.jpg'))
-        cropped_image.save(jpg_path, 'JPEG', quality=95)
+        cropped_image.save(jpg_path, 'JPEG', quality=100)
 
         # update image list to make sure all current images are found in case file ending changed
         image_files = list_images_recursive(image_folder)
@@ -212,11 +218,26 @@ def start_image_input_server(image_folder, keywords_path, backup_path):
 
 def backup_images(source_folder, backup_folder):
     print(f"Backing up images to {backup_folder}...")
+    
+    # Get the list of existing filenames in the backup folder
+    existing_filenames = set(os.listdir(backup_folder))
+    
     for filename in os.listdir(source_folder):
         if filename.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp', ".webp")):
             source_path = os.path.join(source_folder, filename)
-            backup_path = os.path.join(backup_folder, filename)
+
+            # Generate a unique identifier
+            unique_id = str(uuid.uuid4())[:8]  # Use the first 8 characters of the UUID
+
+            # Append the unique identifier to the filename if there's a collision
+            backup_filename = filename
+            while backup_filename in existing_filenames:
+                backup_filename = f"{os.path.splitext(filename)[0]}_{unique_id}{os.path.splitext(filename)[1]}"
+            
+            backup_path = os.path.join(backup_folder, backup_filename)
+
             shutil.copy2(source_path, backup_path)
+
 
 def resize_images(input_folder, output_folder, target_pixel_count=(1024, 1024), quality=95):
    # Get the list of image filenames
