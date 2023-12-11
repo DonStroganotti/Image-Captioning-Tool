@@ -188,26 +188,69 @@
         <img id="image" src="{{ url_for('static', filename=image) }}" alt="Image" />
       </div>
       <div class="form-container">
-        <div id="filename">Current Filename: {{ image }}</div>
+        <div
+          id="filename"
+          style="width: 45vw; white-space: nowrap; overflow: hidden; text-overflow: ellipsis"
+        >
+          Current Filename: {{ image }}
+        </div>
         <!-- Display filename dynamically -->
 
         <h2 id="textContent"></h2>
         <form class="submit_form" method="post" onsubmit="return validateForm()">
-          <input type="text" name="user_input" id="userInput" autocomplete="off" oninput="auto_complete(event)" onkeydown="handleTabKey(event)" />
+          <input
+            type="text"
+            name="user_input"
+            id="userInput"
+            autocomplete="off"
+            oninput="auto_complete(event)"
+            onkeydown="handleTabKey(event)"
+          />
           <div id="autocomplete-list"></div>
-          <input id="submit_button" type="submit" class="submit" value="Submit" formaction="/submit" />
-          <input id="submitAndCrop" type="button" class="submit" value="Submit & Crop" onclick="submitAndUploadCroppedImage()" />
+          <input
+            id="submit_button"
+            type="submit"
+            class="submit"
+            value="Submit"
+            formaction="/submit"
+          />
+          <input
+            id="submitAndCrop"
+            type="button"
+            class="submit"
+            value="Submit & Crop"
+            onclick="submitAndUploadCroppedImage('/upload_cropped_image')"
+          />
+          <input
+            id="submitCropAndCopy"
+            type="button"
+            class="submit"
+            value="Replace Tags -> Copy & Crop"
+            onclick="submitAndUploadCroppedImage('/upload_cropped_image_copy')"
+          />
         </form>
         <!-- previos and next buttons -->
         <div class="btn_container">
           <form class="half_button" method="get" action="/previous_image">
-            <input type="submit" class="button" value="Previous Image" onclick="navButton('previous_image')" />
+            <input
+              type="submit"
+              class="button"
+              value="Previous Image"
+              onclick="navButton('previous_image')"
+            />
           </form>
           <form class="half_button" method="get" action="/next_image">
-            <input type="submit" class="button" value="Next Image" onclick="navButton('next_image')" />
+            <input
+              type="submit"
+              class="button"
+              value="Next Image"
+              onclick="navButton('next_image')"
+            />
           </form>
           <!-- clear tags and copy to input -->
-          <button class="clear_tags" onclick="buttonClearAndCopyTags()">Clear Tags & Copy to Textbox</button>
+          <button class="clear_tags" onclick="buttonClearAndCopyTags()">
+            Clear Tags & Copy to Textbox
+          </button>
           <button class="clear_tags" onclick="buttonClearTags()">Clear Tags</button>
         </div>
         <button class="abort-button" onclick="submitAbort()">Abort</button>
@@ -216,7 +259,10 @@
 
     <!-- load cropper -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.12/cropper.min.js"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.12/cropper.min.css" />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.12/cropper.min.css"
+    />
 
     <script>
       var current_label = "";
@@ -241,6 +287,11 @@
         }
       }
 
+      async function clearStoredTags() {
+        // Send a request to clear the tags of the current image
+        await fetch("/clear_tags");
+      }
+
       // Clears the tags of the current image
       async function buttonClearTags() {
         try {
@@ -254,7 +305,7 @@
           current_label = "";
 
           // Send a request to clear the tags of the current image
-          await fetch("/clear_tags");
+          await clearStoredTags();
 
           // Maintain focus on the input textbox after the page updates
           document.getElementById("userInput").focus();
@@ -265,7 +316,8 @@
 
       function onTextInput() {
         var userInput = document.getElementById("userInput").value;
-        document.getElementById("textContent").innerText = (current_label != "" ? current_label + "," : current_label) + userInput;
+        document.getElementById("textContent").innerText =
+          (current_label != "" ? current_label + "," : current_label) + userInput;
       }
 
       async function keepFocus() {
@@ -309,7 +361,9 @@
         const lastKeyword = keywords[keywords.length - 1];
 
         // Filter words from the fetched keywords that match the last keyword
-        const filteredWords = keywordList.filter((word) => word.toLowerCase().startsWith(lastKeyword));
+        const filteredWords = keywordList.filter((word) =>
+          word.toLowerCase().startsWith(lastKeyword)
+        );
 
         // Display the matched words in the autocomplete dropdown
         filteredWords.forEach((word) => {
@@ -366,20 +420,30 @@
         }
       }
 
-      function submitAndUploadCroppedImage() {
+      async function submitAndUploadCroppedImage(endpoint) {
+        if (!endpoint) {
+          console.error("Endpoint is required.");
+          return;
+        }
+
         var canvas = cropper.getCroppedCanvas();
+
         var croppedDataUrl = canvas.toDataURL();
 
-        console.log("DOES THIS RUN");
-        fetch("/upload_cropped_image", {
+        fetch(endpoint, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({ croppedImage: croppedDataUrl }),
         })
-          .then(() => {
-            // Click the submit button
+          .then(async () => {
+            // clear old tags when making a copy+crop
+            if (endpoint == "/upload_cropped_image_copy") {
+              await clearStoredTags();
+            }
+
+            // Click the submit button to write new tags to file
             document.getElementById("submit_button").click();
           })
           .catch((error) => {
