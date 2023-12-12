@@ -203,6 +203,48 @@ def start_image_input_server(image_folder, keywords_path, backup_path):
 
         return ""
 
+    # This function copies an image file and its corresponding text file (if it exists)
+    # while generating a new unique identifier for the image and the text file.
+    def copy_original_image(current_image, current_image_path):
+        base, ext = os.path.splitext(current_image_path)
+
+        # Check if the current image path contains a hash
+        if "_hash_" in base:
+            # If a hash exists, split the base and the hash
+            base, hash_ext = base.split("_hash_")
+
+        # generate a new hash
+        hash = generate_hash()
+
+        new_image_path = os.path.join(
+            os.path.dirname(current_image_path), f"{base}_hash_{hash}{ext}"
+        )
+
+        # generate new hash until a unique one is found
+        while os.path.exists(new_image_path):
+            print("duplicate hash found, generating a new one...")
+            hash = generate_hash()
+            new_image_path = os.path.join(
+                os.path.dirname(current_image_path), f"{base}_hash_{hash}{ext}"
+            )
+
+        # copy image to new path
+        shutil.copy2(current_image_path, new_image_path)
+
+        # txt file of the current image
+        txt_file = current_image.replace(os.path.splitext(current_image)[1], ".txt")
+        txt_file = os.path.join(os.path.dirname(current_image_path), txt_file)
+
+        if os.path.exists(txt_file):
+            new_txt_file = os.path.join(
+                os.path.dirname(current_image_path), f"{base}_hash_{hash}.txt"
+            )
+            shutil.copy2(txt_file, new_txt_file)
+        else:
+            print(f"No text file found for {current_image_path}")
+
+        return new_image_path
+
     @app.route("/upload_cropped_image_copy", methods=["POST"])
     @app.route("/upload_cropped_image", methods=["POST"])
     def upload_cropped_image():
@@ -216,7 +258,7 @@ def start_image_input_server(image_folder, keywords_path, backup_path):
         current_image_path = os.path.join(image_folder, current_image)
 
         # Generate a unique identifier
-        unique_id = str(uuid.uuid4())[:8]  # Use the first 8 characters of the UUID
+        unique_id = generate_hash()  # Use the first 8 characters of the UUID
 
         # Create a backup filename with the unique identifier
         backup_filename = (
@@ -235,39 +277,11 @@ def start_image_input_server(image_folder, keywords_path, backup_path):
         # Copy the current image to the backup file
         shutil.copy2(current_image_path, backup_filepath)
 
+        new_image_path = current_image_path
+
         # if the path is copy, make a copy in the image folder as well and insert it into the image_files list
         if request.path == "/upload_cropped_image_copy":
-            base, ext = os.path.splitext(current_image_path)
-
-            contains_hash = False
-            # Check if the current image path contains a hash
-            if "_hash_" in base:
-                contains_hash = True
-                print("base: ", base)
-                # If a hash exists, split the base and the hash
-                base, hash_ext = base.split("_hash_")
-
-            # generate a new hash
-            hash = str(uuid.uuid4())[:8]
-
-            new_image_path = os.path.join(
-                os.path.dirname(current_image_path), f"{base}_hash_{hash}{ext}"
-            )
-
-            shutil.copy2(current_image_path, new_image_path)
-
-            # txt file of the current image
-            txt_file = current_image.replace(os.path.splitext(current_image)[1], ".txt")
-            txt_file = os.path.join(os.path.dirname(current_image_path), txt_file)
-            print("Text file: ", txt_file)
-
-            if os.path.exists(txt_file):
-                new_txt_file = os.path.join(
-                    os.path.dirname(current_image_path), f"{base}_hash_{hash}.txt"
-                )
-                shutil.copy2(txt_file, new_txt_file)
-            else:
-                print(f"No text file found for {current_image_path}")
+            new_image_path = copy_original_image(current_image, current_image_path)
 
         # remove the current file before the cropped one is saved
         os.remove(current_image_path)
@@ -290,7 +304,11 @@ def start_image_input_server(image_folder, keywords_path, backup_path):
         # the order here is important because the image at the current index is what will be tagged
         # this has to do with the client side code that triggers a /submit
         ########## IMPORTANT ##############
-        image_files.insert(current_image_index + 1, os.path.basename(new_image_path))
+
+        if not (os.path.basename(new_image_path) in image_files):
+            image_files.insert(
+                current_image_index + 1, os.path.basename(new_image_path)
+            )
 
         return jsonify({"message": "Cropped image received and saved successfully"})
 
@@ -313,7 +331,7 @@ def backup_images(source_folder, backup_folder):
             source_path = os.path.join(source_folder, filename)
 
             # Generate a unique identifier
-            unique_id = str(uuid.uuid4())[:8]  # Use the first 8 characters of the UUID
+            unique_id = generate_hash()  # Use the first 8 characters of the UUID
 
             # Append the unique identifier to the filename if there's a collision
             backup_filename = filename
@@ -323,41 +341,6 @@ def backup_images(source_folder, backup_folder):
             backup_path = os.path.join(backup_folder, backup_filename)
 
             shutil.copy2(source_path, backup_path)
-
-
-def resize_images(
-    input_folder, output_folder, target_pixel_count=(1024, 1024), quality=95
-):
-    # Get the list of image filenames
-    image_filenames = [
-        filename
-        for filename in os.listdir(input_folder)
-        if filename.lower().endswith((".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp"))
-    ]
-
-    # Use tqdm to create a progress bar
-    for filename in tqdm(image_filenames, desc="Resizing Images", unit="image"):
-        input_path = os.path.join(input_folder, filename)
-        output_path = os.path.join(output_folder, filename)
-
-        _target_px_count = target_pixel_count[0] * target_pixel_count[1]
-        # Open the image
-        with Image.open(input_path) as img:
-            _width, _height = img.size
-            _pxCount = _width * _height
-
-            # Resize while maintaining aspect ratio
-            while _pxCount > _target_px_count:
-                _width *= 0.99
-                _height *= 0.99
-                _pxCount = _width * _height
-
-            _width = int(_width)
-            _height = int(_height)
-
-            # Save the resized image as JPEG with the specified quality
-            img = img.resize(size=(_width, _height))
-            img.convert("RGB").save(output_path, "JPEG", quality=quality)
 
 
 def validate_path(path):
@@ -476,7 +459,7 @@ def main_interactive(initial_path, keywords_path, backup_path):
             print("Exiting the interactive terminal.")
             break
         else:
-            print("Invalid choice. Please enter a number between 1 and 8.")
+            print("Invalid choice. Please enter a number between 1 and 9.")
 
 
 if __name__ == "__main__":

@@ -53,6 +53,19 @@
         pointer-events: none; /* Allow click-through to the image */
       }
 
+      .res-label {
+        position: absolute;
+        bottom: 2px;
+        left: 2px;
+        padding: 10px;
+        border-radius: 5px;
+        color: #fff;
+        font-size: 12px;
+        pointer-events: none;
+        text-shadow: 1px 1px 1px #000;
+        font-weight: bold;
+      }
+
       .cropper-container {
         position: relative;
         display: inline-block; /* Ensures the container only takes as much width as the image */
@@ -106,6 +119,18 @@
         cursor: pointer;
       }
 
+      .submit:hover {
+        background-color: #45a049;
+      }
+
+      .replaceTags {
+        background-color: #a53939;
+      }
+
+      .replaceTags:hover {
+        background-color: #772222;
+      }
+
       .submit_form {
         width: 100%;
       }
@@ -141,11 +166,7 @@
       }
 
       .button:hover {
-        background-color: rgb(223, 39, 39);
-      }
-
-      .submit:hover {
-        background-color: #45a049;
+        background-color: rgb(223, 122, 39);
       }
 
       .abort-button {
@@ -211,22 +232,33 @@
             id="submit_button"
             type="submit"
             class="submit"
-            value="Submit"
+            value="Append Tags"
             formaction="/submit"
           />
           <input
             id="submitAndCrop"
             type="button"
             class="submit"
-            value="Submit & Crop"
-            onclick="submitAndUploadCroppedImage('/upload_cropped_image')"
+            value="Crop & Append Tags"
+            onclick="submitAndUploadCroppedImage('/upload_cropped_image', false)"
+          />
+          <input
+            id="submitAndCrop"
+            type="button"
+            class="submit replaceTags"
+            value="Crop & Replace Tags"
+            onclick="submitAndUploadCroppedImage('/upload_cropped_image', true)"
+            onmouseover="updateTagPreview(true)"
+            onmouseleave="updateTagPreview(false)"
           />
           <input
             id="submitCropAndCopy"
             type="button"
-            class="submit"
-            value="Replace Tags -> Copy & Crop"
-            onclick="submitAndUploadCroppedImage('/upload_cropped_image_copy')"
+            class="submit replaceTags"
+            value="Copy & Crop & Replace Tags"
+            onclick="submitAndUploadCroppedImage('/upload_cropped_image_copy', true)"
+            onmouseover="updateTagPreview(true)"
+            onmouseleave="updateTagPreview(false)"
           />
         </form>
         <!-- previos and next buttons -->
@@ -267,6 +299,7 @@
     <script>
       var current_label = "";
       var keywordList = null;
+      const autocompleteList = document.getElementById("autocomplete-list");
 
       // Clear the tags of the current image, and copies the old ones to the input textbox
       async function buttonClearAndCopyTags() {
@@ -285,6 +318,16 @@
         } catch (error) {
           console.error("Error clearing tags:", error);
         }
+      }
+
+      function updateTagPreview(hideOldTags) {
+        var userInput = document.getElementById("userInput").value;
+
+        if (hideOldTags)
+          document.getElementById("textContent").innerText = "New Tags: " + userInput;
+        else
+          document.getElementById("textContent").innerText =
+            (current_label != "" ? current_label + "," : current_label) + userInput;
       }
 
       async function clearStoredTags() {
@@ -384,7 +427,6 @@
 
       function handleTabKey(event) {
         if (event.key === "Tab") {
-          const autocompleteList = document.getElementById("autocomplete-list");
           const firstSuggestion = autocompleteList.querySelector("div");
 
           if (firstSuggestion) {
@@ -400,6 +442,25 @@
           event.preventDefault(); // Prevent the default behavior of the Tab key
         }
       }
+
+      // close autocompleteList when pressing escape
+      window.onkeydown = function (event) {
+        if (event.key === "Escape") {
+          setTimeout(function () {
+            if (document.activeElement.tagName.toLowerCase() === "input") {
+              document.activeElement.blur();
+            }
+          }, 0);
+          autocompleteList.innerHTML = ""; // Clear the dropdown after selecting a suggestion
+        }
+      };
+
+      // close autocomplete list when clicking outside of it
+      document.addEventListener("click", function (event) {
+        if (autocompleteList.contains(event.target) === false) {
+          autocompleteList.innerHTML = "";
+        }
+      });
 
       function submitAbort() {
         // Submit abort message to a new route
@@ -420,7 +481,7 @@
         }
       }
 
-      async function submitAndUploadCroppedImage(endpoint) {
+      async function submitAndUploadCroppedImage(endpoint, clear_tags = false) {
         if (!endpoint) {
           console.error("Endpoint is required.");
           return;
@@ -439,7 +500,7 @@
         })
           .then(async () => {
             // clear old tags when making a copy+crop
-            if (endpoint == "/upload_cropped_image_copy") {
+            if (clear_tags) {
               await clearStoredTags();
             }
 
@@ -456,6 +517,8 @@
       document.addEventListener("DOMContentLoaded", function () {
         var image = document.getElementById("image");
 
+        var reslabel;
+
         cropper = new Cropper(image, {
           movable: false,
           zoomable: false,
@@ -467,15 +530,72 @@
           autoCropArea: 0.8,
           viewMode: 1,
           ready: () => {
-            // Create a label element
-            var label = document.createElement("div");
-            label.className = "crop-label";
-            label.textContent = "Click and drag to crop";
-
-            // Append the label to the cropper container
             var cropperContainer = document.querySelector(".cropper-canvas");
-            cropperContainer.appendChild(label);
+
+            var croplabel = document.createElement("div");
+            croplabel.className = "crop-label";
+            croplabel.textContent = "Click and drag to crop";
+            cropperContainer.appendChild(croplabel);
+
+            // Create a label element
+            reslabel = document.createElement("div");
+            reslabel.className = "res-label";
+            reslabel.textContent = "";
+            cropperContainer.appendChild(reslabel);
+
+            // Update the label when the image is loaded
+            updateResLabel(image.naturalWidth, image.naturalHeight);
           },
+        });
+
+        function handleResolutionChange(width, height) {
+          let pixelCountTarget1 = 512 * 512;
+          let pixelCountTarget2 = 768 * 768;
+          let pixelCountTarget3 = 1024 * 1024;
+
+          let pixelCount = width * height;
+          let color = "rgb(255, 153, 153)";
+          let extra = "bad";
+
+          if (pixelCount > pixelCountTarget3) {
+            color = "rgb(0, 255, 25)";
+            extra = "good";
+          } else if (pixelCount > pixelCountTarget2) {
+            color = "rgb(0, 213, 255)";
+            extra = "decent";
+          } else if (pixelCount > pixelCountTarget1) {
+            color = "rgb(255, 247, 89)";
+            extra = "not good";
+          }
+
+          return { color, extra };
+        }
+
+        function updateResLabel(originalWidth, originalHeight, cropWidth = 0, cropHeight = 0) {
+          cropWidth = Math.floor(cropWidth);
+          cropHeight = Math.floor(cropHeight);
+
+          // color and info for original resolution
+          let original = handleResolutionChange(image.naturalWidth, image.naturalHeight);
+          let crop = handleResolutionChange(cropWidth, cropHeight);
+
+          let _innerHTML = `<span style="color:${original.color}">Original Resolution: ${image.naturalWidth}x${image.naturalHeight} - ${original.extra}</span>`;
+          if (cropWidth > 0 && cropHeight > 0) {
+            _innerHTML += ` | <span style="color:${crop.color}">Crop Resolution: ${cropWidth}x${cropHeight} - ${crop.extra}</span>`;
+          }
+
+          reslabel.innerHTML = _innerHTML;
+        }
+
+        image.addEventListener("crop", (e) => {
+          // reslabel.innerHTML = `<span style="color:${original.color}">Original Resolution: ${
+          //   image.naturalWidth
+          // }x${image.naturalHeight} - ${original.extra} * </span> - <span style="color:${
+          //   crop.color
+          // }">Crop Resolution: ${Math.floor(e.detail.width)}x${Math.floor(e.detail.height)} - ${
+          //   crop.extra
+          // }</span>`;
+          updateResLabel(image.naturalWidth, image.naturalHeight, e.detail.width, e.detail.height);
         });
       });
     </script>
