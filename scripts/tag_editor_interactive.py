@@ -402,9 +402,12 @@ def main_interactive(initial_path, keywords_path, backup_path):
         print("4. Create text files with initial text")
         print("5. Process images and append text to corresponding files")
         print("6. Outputs the content of all txt files into a new file as a list")
-        print("7. Lists all files that contain a specific keyword")
-        print("8. Backup and Resize Images")
-        print("9. Exit")
+        print(
+            "7. Reads the line of a txt file and matches them to corresponding image files"
+        )
+        print("8. Lists all files that contain a specific keyword")
+        print("9. Backup and Resize Images")
+        print("10. Exit")
 
         choice = input("Enter the operation number (1-9): ")
 
@@ -429,13 +432,20 @@ def main_interactive(initial_path, keywords_path, backup_path):
             # start_image_input_server(folder_path)
         elif choice == "6":
             file_name = input("Please input the name for the output file: ")
-            read_and_sort_text_files(
-                image_folder_path, os.path.dirname(__file__) + "/" + file_name
+            save_all_captions_to_txt_file(
+                # move one folder up from the image folder by getting the folder of the folder
+                image_folder_path,
+                os.path.dirname(image_folder_path) + "/" + file_name,
             )
         elif choice == "7":
-            keyword = input("Input the keyword you are searching for: ")
-            print(list_files_with_keyword(image_folder_path, keyword))
+            captions_file_path = input("Please input the path for the caption file: ")
+            caption_file_to_individual_captions(captions_file_path, image_folder_path)
         elif choice == "8":
+            keyword = input("Input the keyword you are searching for: ")
+            file_list = list_files_with_keyword(image_folder_path, keyword)
+            print(f"There are {len(file_list)} entries in the list.")
+            print("\n".join(file_list))
+        elif choice == "9":
             # Option to backup and resize images
             resize_target = input(
                 "Enter the target pixel count (width height), e.g., 1024 1024: "
@@ -455,11 +465,11 @@ def main_interactive(initial_path, keywords_path, backup_path):
                 image_folder_path,
                 target_pixel_count=(target_width, target_height),
             )
-        elif choice == "9":
+        elif choice == "10":
             print("Exiting the interactive terminal.")
             break
         else:
-            print("Invalid choice. Please enter a number between 1 and 9.")
+            print("Invalid choice. Please enter a number between 1 and 10.")
 
 
 if __name__ == "__main__":

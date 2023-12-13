@@ -32,14 +32,6 @@ def is_text_file_empty(txt_file_path):
     return os.path.getsize(txt_file_path) == 0
 
 
-# Function to extract numerical parts from a string for natural sorting
-def extract_numbers(s):
-    return [
-        int(text) if text.isdigit() else text.lower()
-        for text in re.split("([0-9]+)", s)
-    ]
-
-
 def extract_keywords_from_files(folder_path):
     # Collect all keywords from txt files in the specified folder and its subfolders
     keywords_set = set()
@@ -82,7 +74,7 @@ def update_keywords_json(folder_path, json_file_path):
         json.dump({"keywords": filtered_list}, json_file, indent=2)
 
 
-def read_and_sort_text_files(input_folder, output_file):
+def save_all_captions_to_txt_file(input_folder, output_file_path):
     try:
         # Get a list of all text files in the input folder
         text_files = [f for f in os.listdir(input_folder) if f.lower().endswith(".txt")]
@@ -92,6 +84,7 @@ def read_and_sort_text_files(input_folder, output_file):
 
         # Read the content of each text file and append it to a list
         content_list = []
+        json_content_list = []
         for file_name in sorted_text_files:
             file_path = os.path.join(input_folder, file_name)
             with open(file_path, "r") as file:
@@ -100,14 +93,44 @@ def read_and_sort_text_files(input_folder, output_file):
                 while file_content.endswith("\n"):
                     file_content = file_content[:-1]
                 content_list.append(file_content)
+                json_content_list.append(
+                    {"file_name": file_name, "caption": file_content}
+                )
 
-        # Write the content list to the output file
-        with open(output_file, "w") as output_file:
+        # Write the content list to the output file as a .txt
+        with open(output_file_path, "w") as output_file:
             output_file.write("\n".join(content_list))
 
-        print(f"Content of text files sorted and written to {output_file}")
+        json_output_file_path = os.path.splitext(output_file_path)[0] + ".json"
+
+        # # Write the json_content_list to a .json file
+        with open(json_output_file_path, "w") as json_output_file:
+            json.dump(json_content_list, json_output_file)
+
+        print(
+            f"Content of text files sorted and written to: \n{output_file_path}\n{json_output_file_path} "
+        )
     except Exception as e:
         print(f"Error reading and sorting text files: {e}")
+
+
+# This function reads the content of the input txt file and writes it to a .txt file
+# with the same name as the image files in the output folder
+# TODO: make it also able to read the .json file that 'save_all_captions_to_txt_file' outputs
+def caption_file_to_individual_captions(input_txt_file, image_folder):
+    try:
+        image_files = list_images_recursive(image_folder)
+        with open(input_txt_file, "r") as file:
+            content_list = file.readlines()
+        for image_file in image_files:
+            output_file = os.path.join(
+                image_folder, os.path.splitext(image_file)[0] + ".txt"
+            )
+            with open(output_file, "w") as output_file:
+                output_file.write(content_list[image_files.index(image_file)])
+        print(f"Content of input txt file written to text files in {image_folder}")
+    except Exception as e:
+        print(f"Error writing content to text files: {e}")
 
 
 def list_files_with_keyword(folder_path, keyword):
@@ -133,6 +156,14 @@ def list_files_with_keyword(folder_path, keyword):
                 matching_files.append(file_name)
 
     return matching_files
+
+
+# Function to extract numerical parts from a string for natural sorting
+def extract_numbers(s):
+    return [
+        int(text) if text.isdigit() else text.lower()
+        for text in re.split("([0-9]+)", s)
+    ]
 
 
 def list_images_recursive(base_folder):

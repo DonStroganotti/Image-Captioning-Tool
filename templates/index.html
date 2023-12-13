@@ -201,6 +201,11 @@
       #autocomplete-list div:hover {
         background-color: #e0e0e0;
       }
+
+      .textContent {
+        min-height: 4em;
+        line-height: 1;
+      }
     </style>
   </head>
   <body onload="keepFocus()">
@@ -217,7 +222,7 @@
         </div>
         <!-- Display filename dynamically -->
 
-        <h2 id="textContent"></h2>
+        <h2 id="textContent" class="textContent"></h2>
         <form class="submit_form" method="post" onsubmit="return validateForm()">
           <input
             type="text"
@@ -579,22 +584,15 @@
           let original = handleResolutionChange(image.naturalWidth, image.naturalHeight);
           let crop = handleResolutionChange(cropWidth, cropHeight);
 
-          let _innerHTML = `<span style="color:${original.color}">Original Resolution: ${image.naturalWidth}x${image.naturalHeight} - ${original.extra}</span>`;
+          let _innerHTML = `<span style="color:${original.color}">Res: ${image.naturalWidth}x${image.naturalHeight} - ${original.extra}</span>`;
           if (cropWidth > 0 && cropHeight > 0) {
-            _innerHTML += ` | <span style="color:${crop.color}">Crop Resolution: ${cropWidth}x${cropHeight} - ${crop.extra}</span>`;
+            _innerHTML += ` | <span style="color:${crop.color}">Crop: ${cropWidth}x${cropHeight} - ${crop.extra}</span>`;
           }
 
           reslabel.innerHTML = _innerHTML;
         }
 
         image.addEventListener("crop", (e) => {
-          // reslabel.innerHTML = `<span style="color:${original.color}">Original Resolution: ${
-          //   image.naturalWidth
-          // }x${image.naturalHeight} - ${original.extra} * </span> - <span style="color:${
-          //   crop.color
-          // }">Crop Resolution: ${Math.floor(e.detail.width)}x${Math.floor(e.detail.height)} - ${
-          //   crop.extra
-          // }</span>`;
           updateResLabel(image.naturalWidth, image.naturalHeight, e.detail.width, e.detail.height);
         });
       });
