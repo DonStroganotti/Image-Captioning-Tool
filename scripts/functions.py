@@ -1,3 +1,5 @@
+from collections import Counter
+import operator
 import json
 import os
 import re
@@ -35,6 +37,7 @@ def is_text_file_empty(txt_file_path):
 def extract_keywords_from_files(folder_path):
     # Collect all keywords from txt files in the specified folder and its subfolders
     keywords_set = set()
+    keywords_counter = Counter()
 
     image_files = list_images_recursive(folder_path)
 
@@ -48,26 +51,41 @@ def extract_keywords_from_files(folder_path):
                 # Assuming keywords are separated by commas
                 keywords = [keyword.strip() for keyword in content.split(",")]
                 keywords_set.update(keywords)
+                # for word in keywords:
+                keywords_counter.update(keywords)
 
-    return list(keywords_set)
+    return list(keywords_set), keywords_counter
 
 
 def update_keywords_json(folder_path, json_file_path):
+    keywords_counter = Counter()
+
     # Get existing keywords from the JSON file
     existing_keywords = []
     if os.path.exists(json_file_path):
         with open(json_file_path, "r", encoding="utf-8") as json_file:
             data = json.load(json_file)
             existing_keywords = data.get("keywords", [])
+            keywords_counter.update(existing_keywords)
 
     # Extract new keywords from txt files
-    new_keywords = extract_keywords_from_files(folder_path)
+    new_keywords, counter = extract_keywords_from_files(folder_path)
+
+    keywords_counter.update(counter)
 
     # Combine existing and new keywords, and remove duplicates
-    all_keywords = list(set(existing_keywords + new_keywords))
+    all_keywords = set(existing_keywords + new_keywords)
 
     # remove empty
     filtered_list = [item for item in all_keywords if item != ""]
+
+    # sort list by occurence:
+    filtered_list = [
+        key
+        for key, val in sorted(
+            keywords_counter.items(), key=operator.itemgetter(1), reverse=True
+        )
+    ]
 
     # Update the keywords.json file
     with open(json_file_path, "w", encoding="utf-8") as json_file:
