@@ -1,5 +1,7 @@
 import base64
+from collections import OrderedDict
 import io
+from operator import itemgetter
 import os
 import argparse
 import shutil
@@ -385,6 +387,7 @@ def main_interactive(initial_path, keywords_path, backup_path):
         print("backup folder '{}' is invalid!".format(backup_folder_path))
         return
 
+    print("Image folder path: ", image_folder_path)
     print("Backup folder path: ", backup_folder_path)
 
     # if keywords path is empty or none create a subfolder in the images folder for the keywords
@@ -407,7 +410,10 @@ def main_interactive(initial_path, keywords_path, backup_path):
         )
         print("8. Lists all files that contain a specific keyword")
         print("9. Backup and Resize Images")
-        print("10. Exit")
+        print("10. filename to .txt files")
+        print("11. count tokens in .txt files")
+        print("12. get full prompts that includes keywords")
+        print("13. Exit")
 
         choice = input("Enter the operation number (1-9): ")
 
@@ -457,8 +463,10 @@ def main_interactive(initial_path, keywords_path, backup_path):
                     "Invalid input for target pixel count. Please enter two integers separated by a space."
                 )
                 continue
-            # Backup images
-            backup_images(image_folder_path, backup_folder_path)
+            backup = input("Do you want to backup the original images? yes/no:")
+            if backup != "no":
+                # Backup images
+                backup_images(image_folder_path, backup_folder_path)
             # Resize images
             resize_images(
                 image_folder_path,
@@ -466,6 +474,71 @@ def main_interactive(initial_path, keywords_path, backup_path):
                 target_pixel_count=(target_width, target_height),
             )
         elif choice == "10":
+            split_token = " "
+            tmp = input("Split token, by default a whitespace:")
+            if tmp != split_token and len(tmp) > 0:
+                split_token = tmp
+            print(f"Split token: '{split_token}'")
+            create_text_file_from_filename(image_folder_path, split_token)
+
+        elif choice == "11":
+            save_path = os.path.join(image_folder_path, "keywords.json")
+
+            if os.path.exists(save_path):
+                print(f"{save_path} already exists, reading...")
+                with open(save_path, "r") as f:
+                    _keywords = json.load(f)
+                    keywords = {}
+                    for key, value in _keywords.items():
+                        keywords[key.strip()] = value
+                    print("sorting keywords...")
+                    keywords = OrderedDict(
+                        sorted(keywords.items(), key=itemgetter(1), reverse=True)
+                    )
+
+            else:
+                print("Counting keywords in files...")
+                keywords = count_keywords_in_txt_files(image_folder_path)
+                print("sorting keywords...")
+                keywords = OrderedDict(
+                    sorted(keywords.items(), key=itemgetter(1), reverse=True)
+                )
+
+            with open(save_path, "w") as f:
+                cleaned = {}
+                # ignore keywords that only have 1 entry
+                for k, v in keywords.items():
+                    if v > 1:
+                        cleaned[k] = v
+                json.dump(cleaned, f, indent=4)
+                print(f"saving to: {save_path}")
+        elif choice == "12":
+            keywords = input(
+                "Prompt must include all the following comma separated keywords\n"
+            )
+
+            keywords = [keyword.strip() for keyword in keywords.split(",")]
+
+            prompts = get_full_prompts_that_include_all_keywords(
+                image_folder_path, keywords
+            )
+
+            print(f"{len(prompts)} prompts found for keywords: {keywords}")
+
+            output_filename = input("Save list of prompts to filname: ")
+
+            overwrite = True
+            if os.path.exists(output_filename) == True:
+                print(f"Filename {output_filename} already exists")
+                _overwrite = input("Do you want to overwrite the file? yes/no: ")
+                if _overwrite.lower() != "yes":
+                    overwrite = False
+
+            if overwrite == True:
+                with open(output_filename, "w") as f:
+                    for prompt in prompts:
+                        f.write(prompt + "\n")
+        elif choice == "13":
             print("Exiting the interactive terminal.")
             break
         else:

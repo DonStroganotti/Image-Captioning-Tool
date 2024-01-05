@@ -6,7 +6,7 @@ import re
 import uuid
 
 from PIL import Image
-import tqdm
+from tqdm import tqdm
 
 
 def remove_trailing_commas(file_path):
@@ -159,19 +159,16 @@ def list_files_with_keyword(folder_path, keyword):
 
     matching_files = []
 
+    txt_files = list_files_recursive(folder_path, [".txt"])
+
     # Iterate through all files in the folder
-    for file_name in os.listdir(folder_path):
-        file_path = os.path.join(folder_path, file_name)
-
-        # Check if the file is a text file
-        if file_name.lower().endswith(".txt") and os.path.isfile(file_path):
-            # Read the content of the text file
-            with open(file_path, "r", encoding="utf-8") as file:
-                file_content = file.read()
-
-            # Check if the keyword is present in the file content
-            if keyword.lower() in file_content.lower():
-                matching_files.append(file_name)
+    for file_name in txt_files:
+        # Read the content of the text file
+        with open(os.path.join(folder_path, file_name), "r", encoding="utf-8") as file:
+            file_content = file.read()
+        # Check if the keyword is present in the file content
+        if keyword.lower() in file_content.lower():
+            matching_files.append(file_name)
 
     return matching_files
 
@@ -184,17 +181,22 @@ def extract_numbers(s):
     ]
 
 
-def list_images_recursive(base_folder):
-    image_files = []
+def list_files_recursive(base_folder, file_endings=[]):
+    file_paths = []
     for root, dirs, files in os.walk(base_folder):
         for file in files:
-            if file.lower().endswith(
-                (".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp")
-            ):
+            if file.lower().endswith(tuple(file_endings)):
                 relative_path = os.path.relpath(
                     os.path.join(root, file), base_folder
                 ).replace(os.path.sep, "/")
-                image_files.append(relative_path)
+                file_paths.append(relative_path)
+    return file_paths
+
+
+def list_images_recursive(base_folder):
+    image_files = list_files_recursive(
+        base_folder, [".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp"]
+    )
     return sorted(image_files, key=extract_numbers)
 
 
@@ -207,11 +209,13 @@ def resize_images(
     input_folder, output_folder, target_pixel_count=(1024, 1024), quality=95
 ):
     # Get the list of image filenames
-    image_filenames = [
-        filename
-        for filename in os.listdir(input_folder)
-        if filename.lower().endswith((".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp"))
-    ]
+    # image_filenames = [
+    #     filename
+    #     for filename in os.listdir(input_folder)
+    #     if filename.lower().endswith((".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp"))
+    # ]
+
+    image_filenames = list_images_recursive(input_folder)
 
     # Use tqdm to create a progress bar
     for filename in tqdm(image_filenames, desc="Resizing Images", unit="image"):
@@ -230,9 +234,117 @@ def resize_images(
                 _height *= 0.99
                 _pxCount = _width * _height
 
+            # Resize while maintaining aspect ratio
+            while _pxCount < _target_px_count:
+                _width *= 1.01
+                _height *= 1.01
+                _pxCount = _width * _height
+
             _width = int(_width)
             _height = int(_height)
 
             # Save the resized image as JPEG with the specified quality
             img = img.resize(size=(_width, _height))
             img.convert("RGB").save(output_path, "JPEG", quality=quality)
+
+
+def get_image_txt_file_pairs(input_folder):
+    image_filenames = list_images_recursive(input_folder)
+
+    images_with_txt_file = []
+    images_without_txt_file = []
+
+    total_images = 0
+    missing_txt_files = 0
+
+    new_txt_file_paths = []
+    txt_file_paths = []
+
+    for image in image_filenames:
+        total_images += 1
+        txt_file_name = image.rpartition(".")[0] + ".txt"
+        txt_file_path = os.path.join(input_folder, txt_file_name)
+        if os.path.exists(txt_file_path):
+            images_with_txt_file.append(image)
+            txt_file_paths.append(txt_file_path)
+        else:
+            images_without_txt_file.append(image)
+            new_txt_file_paths.append(txt_file_path)
+            missing_txt_files += 1
+
+    return (
+        images_with_txt_file,
+        images_without_txt_file,
+        total_images,
+        missing_txt_files,
+        new_txt_file_paths,
+        txt_file_paths,
+    )
+
+
+def count_keywords_in_txt_files(input_folder):
+    (
+        images_with_txt_file,
+        images_without_txt_file,
+        total_images,
+        missing_txt_files,
+        new_txt_file_paths,
+        txt_file_paths,
+    ) = get_image_txt_file_pairs(input_folder)
+
+    keyword_counter = Counter()
+
+    for file in txt_file_paths:
+        with open(file, "r") as f:
+            file_content = f.read()
+            _tokens = [item.strip() for item in file_content.split(",") if item != ""]
+            tokens = []
+            for t in _tokens:
+                # ignore token if it is too short or doesn't contain letters
+                if len(t) > 1 and re.match("[a-zA-Z]", t):
+                    tokens.append(t)
+
+            keyword_counter.update(tokens)
+
+    return keyword_counter
+
+
+def create_text_file_from_filename(input_folder, split_token=" "):
+    (
+        images_with_txt_file,
+        images_without_txt_file,
+        total_images,
+        missing_txt_files,
+        new_txt_file_paths,
+        txt_file_paths,
+    ) = get_image_txt_file_pairs(input_folder)
+
+    print(f"{missing_txt_files} out of {total_images} images are missing .txt files.")
+
+    print(
+        f"Creating {missing_txt_files} .txt files from filenames using '{split_token}' to separate keywords..."
+    )
+
+    for txt_file_name in new_txt_file_paths:
+        basename = os.path.basename(txt_file_name).rpartition(".")[0]
+        tokens = [item.strip() for item in basename.split(split_token) if item != ""]
+        if len(tokens) == 0:
+            print(f"File: {txt_file_name} is missing tokens")
+        with open(txt_file_name, "w") as f:
+            f.write(",".join(tokens))
+
+
+def get_full_prompts_that_include_all_keywords(directory, keywords=[]):
+    txt_files = list_files_recursive(directory, [".txt"])
+    output = []
+
+    for file in txt_files:
+        contains_all = True
+        for keyword in keywords:
+            basename = os.path.basename(file.rpartition(".")[0])
+            if keyword not in basename:
+                contains_all = False
+        if contains_all:
+            output.append(basename)
+
+    return output
