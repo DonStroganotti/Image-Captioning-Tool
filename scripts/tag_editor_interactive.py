@@ -513,31 +513,65 @@ def main_interactive(initial_path, keywords_path, backup_path):
                 json.dump(cleaned, f, indent=4)
                 print(f"saving to: {save_path}")
         elif choice == "12":
-            keywords = input(
-                "Prompt must include all the following comma separated keywords\n"
+            print(
+                "To load keywords and settings from a json file input the file name instead of keywords."
             )
+            print("Otherwise input a list of comma separated keywords:")
 
-            keywords = [keyword.strip() for keyword in keywords.split(",")]
+            keywords = input()
 
-            prompts = get_full_prompts_that_include_all_keywords(
-                image_folder_path, keywords
-            )
+            # json format
+            """
+                [
+                    {
+                        filename: name,
+                        keywords: [list of keywords],
+                    },
+                    {
+                        filename: name,
+                        keywords: [list of keywords],
+                    }
+                ]
+            """
 
-            print(f"{len(prompts)} prompts found for keywords: {keywords}")
+            def save_prompts(output_filename, prompts):
+                overwrite = True
+                if os.path.exists(output_filename) == True:
+                    print(f"Filename {output_filename} already exists")
+                    _overwrite = input("Do you want to overwrite the file? yes/no: ")
+                    if _overwrite.lower() != "yes":
+                        overwrite = False
 
-            output_filename = input("Save list of prompts to filname: ")
+                if overwrite == True:
+                    with open(output_filename, "w") as f:
+                        for prompt in prompts:
+                            f.write(prompt + "\n")
 
-            overwrite = True
-            if os.path.exists(output_filename) == True:
-                print(f"Filename {output_filename} already exists")
-                _overwrite = input("Do you want to overwrite the file? yes/no: ")
-                if _overwrite.lower() != "yes":
-                    overwrite = False
+            if ".json" in keywords:
+                with open(keywords, "r") as f:
+                    json_data = json.load(f)
 
-            if overwrite == True:
-                with open(output_filename, "w") as f:
-                    for prompt in prompts:
-                        f.write(prompt + "\n")
+                    for entry in json_data:
+                        filename = entry["filename"]
+                        keywords = entry["keywords"]
+                        prompts = get_full_prompts_that_include_all_keywords(
+                            image_folder_path, keywords
+                        )
+                        print(f"{len(prompts)} prompts found for keywords: {keywords}")
+                        save_prompts(filename, prompts)
+
+            else:
+                keywords = [keyword.strip() for keyword in keywords.split(",")]
+
+                prompts = get_full_prompts_that_include_all_keywords(
+                    image_folder_path, keywords
+                )
+
+                print(f"{len(prompts)} prompts found for keywords: {keywords}")
+
+                output_filename = input("Save list of prompts to filname: ")
+
+                save_prompts(output_filename, prompts)
         elif choice == "13":
             print("Exiting the interactive terminal.")
             break
